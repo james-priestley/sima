@@ -549,7 +549,7 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             NMF_cycle_signals = np.empty((len(np.unique(mask_ROI_idx)),
                                           cycle_signals.shape[1]))
             for roi_idx in np.unique(mask_ROI_idx):
-                mixed_signals = cycle_signals[mask_ROI_idx==roi_idx]
+                mixed_signals = cycle_signals[mask_ROI_idx==roi_idx, :]
 
                 if np.mean(np.isnan(mixed_signals[0, :])) == 1:
                     NMF_cycle_signals[roi_idx, :] = mixed_signals[0, :]
