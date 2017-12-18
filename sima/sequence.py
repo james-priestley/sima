@@ -1039,11 +1039,6 @@ class _MotionCorrectedSequence(_WrapperSequence):
         }
 
 
-class _NoRMotionCorrectedSequence(_WrapperSequence):
-    def __init__():
-        return []
-
-
 class _MaskedSequence(_WrapperSequence):
     """Sequence for masking invalid data with NaN's.
 
