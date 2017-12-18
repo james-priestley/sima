@@ -18,6 +18,14 @@ import numpy as np
 from scipy.sparse import hstack, vstack, diags, csc_matrix
 from scipy.sparse.linalg import inv
 
+from sima.ROI import ROI
+
+try:
+    from fissa import roitools, neuropil
+    has_fissa = True
+except ImportError:
+    has_fissa = False
+
 from future import standard_library
 standard_library.install_aliases()
 
@@ -284,7 +292,8 @@ def _remove_pixels(masks, pixels_to_remove):
 
 
 def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
-                 n_processes=1, demix_channel=None):
+                 n_processes=1, demix_channel=None, local_NMF=False,
+                 NMF_kws=None):
     """Extracts imaging data from the current dataset using the
     supplied ROIs file.
 
@@ -306,6 +315,28 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
     demix_channel : int, optional
         Index of channel to demix from the signal channel. If None, do not
         demix signals.
+    local_NMF : bool, optional
+        If True, perform local NMF demixing during ROI extraction
+        TODO: NMF kwargs
+    NMF_kws : dict, optional
+        Parameters for NMF procedure specified as entries in dict
+
+        nNpilSeg : int
+            # of neuropil segments, default 6
+        expFactor : int
+            size of each neuropil segment relative to ROI, default 1
+        alpha : float
+            constant which multiplies the regularization term in the
+            NMF loss function, default 0.2
+        nComponents : int
+            # of demixed components to obtain via NMF, default nNpilSeg + 1;
+            if NMF_kws['nComponents'] is None, component # is set according to
+            # of principal components needed to capture 99 percent variance
+        npilThres : float
+            Mean signal threshold for detecting the background component among
+            the demixed signals. If the background is chosen as the best match
+            during signal assignment, the actual output will be zeroed,
+            default 0.75
 
     Returns
     ------
@@ -333,11 +364,45 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
     masks = [hstack([mask.reshape((1, num_rows * num_columns))
              for mask in roi.mask]) for roi in rois]
 
+    if local_NMF:
+        if not has_fissa:
+            warning.warn('fissa is not installed.' + \
+                         'Skipping local NMF application')
+            local_NMF = False
+        else:
+            # Set NMF options
+            if not NMF_kws:
+                NMF_kws = {}
+            nNpilSeg = NMF_kws.pop('nNpilSeg', 6)
+            expFactor = NMF_kws.pop('expFactor', 1)
+            alpha = NMF_kws.pop('alpha', 0.2)
+            nComponents = NMF_kws.pop('nComponents', nNpilSeg+1)
+            npilThres = NMF_kws.pop('npilThres', 0.75)
+
+            # Loop through ROIs and generate neuropil masks
+            neuropil_rois = []
+            for roi in rois:
+                roi_halo = np.stack(
+                    [roitools.getmasks_npil(x, nNpil=nNpilSeg,
+                    expansion=expFactor) if np.sum(x)>0 else [x]*nNpilSeg \
+                    for x in [mask.todense() for mask in roi.mask]]
+                    )
+                neuropil_rois += [roi_halo[:, x, ...] for x in range(nNpilSeg)]
+
+            neuropil_rois = [ROI(x) for x in neuropil_rois]
+            neuropil_masks = [hstack([mask.reshape((1, num_rows * num_columns))
+                              for mask in roi.mask]) for roi in neuropil_rois]
+
+            # Create ROI index for masks and combine with main mask list
+            mask_ROI_idx = np.hstack([np.arange(len(masks))] + \
+                                     [[x]*nNpilSeg for x in range(len(masks))])
+            masks = masks + neuropil_masks
+
     # Find overlapping pixels
     overlap = _identify_overlapping_pixels(masks)
 
-    # Remove pixels that overlap between ROIs
-    if remove_overlap:
+    # Remove pixels that overlap between ROIs (skip if local_NMF)
+    if remove_overlap and not local_NMF:
         masks = _remove_pixels(masks, overlap)
 
     # If mask is boolean convert to float and normalize values such that
@@ -477,10 +542,46 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             demixed_signal = put_back_nan_rois(
                 demixed_signal, rois_to_include, original_n_rois)
 
-    signals = {'raw': raw_signal}
+    # Denoise ROIs with local NMF (should this be a function?)
+    if local_NMF:
+        NMF_signals = []
+        for cycle_signals in raw_signal:
+            NMF_cycle_signals = np.empty((len(np.unique(mask_ROI_idx)),
+                                          cycle_signals.shape[1]))
+            for roi_idx in np.unique(mask_ROI_idx):
+                mixed_signals = cycle_signals[mask_ROI_idx==roi_idx]
+
+                if np.mean(np.isnan(mixed_signals[0, :])) == 1:
+                    NMF_cycle_signals[roi_idx, :] = mixed_signals[0, :]
+
+                else:
+                    # Slice out frames where true ROI is nan
+                    nan_idx = np.isnan(mixed_signals[0, :])
+                    mixed_signals = np.nan_to_num(mixed_signals[:, ~nan_idx])
+
+                    _, S_matched, _, _ = neuropil.separate(
+                        np.nan_to_num(mixed_signals), alpha=alpha,
+                        n=nComponents)
+
+                    if np.mean(S_matched[0, :]) > npilThres:
+                        NMF_cycle_signals[roi_idx, :] = 0
+                    else:
+                        NMF_cycle_signals[roi_idx, ~nan_idx] = S_matched[0, :]
+                        NMF_cycle_signals[roi_idx, nan_idx] = np.nan
+
+            NMF_signals.append(NMF_cycle_signals)
+
+        signals = {'raw': [x[0:len(np.unique(mask_ROI_idx)), :] \
+                           for x in raw_signal],
+                   'NMF_raw': NMF_signals,
+                   '_masks': [masks[idx].tolil() for idx in rois_to_include \
+                              if idx < len(np.unique(mask_ROI_idx))]}
+    else:
+        signals = {'raw': raw_signal}
+        signals['_masks'] = [masks[idx].tolil() for idx in rois_to_include]
+
     if demixer is not None:
         signals['demixed_raw'] = demixed_signal
-    signals['_masks'] = [masks[idx].tolil() for idx in rois_to_include]
     signals['mean_frame'] = dataset.time_averages[..., signal_channel]
     if remove_overlap:
         signals['overlap'] = overlap
