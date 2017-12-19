@@ -17,6 +17,7 @@ import warnings
 import numpy as np
 from scipy.sparse import hstack, vstack, diags, csc_matrix
 from scipy.sparse.linalg import inv
+from scipy.signal import savgol_filter
 
 from sima.ROI import ROI
 
@@ -337,6 +338,8 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             the demixed signals. If the background is chosen as the best match
             during signal assignment, the actual output will be zeroed,
             default 0.75
+        filt : bool
+            <details>
 
     Returns
     ------
@@ -378,6 +381,7 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             alpha = NMF_kws.pop('alpha', 0.2)
             nComponents = NMF_kws.pop('nComponents', nNpilSeg+1)
             npilThres = NMF_kws.pop('npilThres', 0.75)
+            npilFilt = NMF_kws.pop('filt', False)
 
             # Loop through ROIs and generate neuropil masks
             neuropil_rois = []
@@ -550,6 +554,9 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
                                           cycle_signals.shape[1]))
             for roi_idx in np.unique(mask_ROI_idx):
                 mixed_signals = cycle_signals[mask_ROI_idx==roi_idx, :]
+
+                if npilFilt:
+                    mixed_signals = savgol_filter(mixed_signals, 3, 1, axis=1)
 
                 if np.mean(np.isnan(mixed_signals[0, :])) == 1:
                     NMF_cycle_signals[roi_idx, :] = mixed_signals[0, :]
