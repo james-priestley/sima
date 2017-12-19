@@ -339,7 +339,8 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             during signal assignment, the actual output will be zeroed,
             default 0.75
         filt : bool
-            <details>
+            Apply short timescale (3 frame) linear smoothing to ROI signals
+            before NMF demixing
 
     Returns
     ------
@@ -391,9 +392,8 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
                     expansion=expFactor) if np.sum(x)>0 else [x]*nNpilSeg \
                     for x in [mask.todense() for mask in roi.mask]]
                     )
-                neuropil_rois += [roi_halo[:, x, ...] for x in range(nNpilSeg)]
+                neuropil_rois += [ROI(roi_halo[:, x, ...]) for x in range(nNpilSeg)]
 
-            neuropil_rois = [ROI(x) for x in neuropil_rois]
             neuropil_masks = [hstack([mask.reshape((1, num_rows * num_columns))
                               for mask in roi.mask]) for roi in neuropil_rois]
 
