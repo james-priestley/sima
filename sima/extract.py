@@ -338,9 +338,9 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
             the demixed signals. If the background is chosen as the best match
             during signal assignment, the actual output will be zeroed,
             default 0.75
-        filt : bool
-            Apply short timescale (3 frame) linear smoothing to ROI signals
-            before NMF demixing
+        filt : list
+            [window_length, order] for savgol filter application on ROI/neuropil
+            traces prior to NMF demixing
 
     Returns
     ------
@@ -556,7 +556,8 @@ def extract_rois(dataset, rois, signal_channel=0, remove_overlap=True,
                 mixed_signals = cycle_signals[mask_ROI_idx==roi_idx, :]
 
                 if npilFilt:
-                    mixed_signals = savgol_filter(mixed_signals, 3, 1, axis=1)
+                    mixed_signals = savgol_filter(mixed_signals, npilFilt[0],
+                                                  npilFilt[1], axis=1)
 
                 if np.mean(np.isnan(mixed_signals[0, :])) == 1:
                     NMF_cycle_signals[roi_idx, :] = mixed_signals[0, :]
