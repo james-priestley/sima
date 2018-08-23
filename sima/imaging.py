@@ -701,7 +701,7 @@ class ImagingDataset(object):
                 imsave(filename, out)
 
     def export_frames(self, filenames, fmt='TIFF16', fill_gaps=True,
-                      scale_values=False, compression=None):
+                      scale_values=False, compression=None, interlace=False):
         """Export imaging data from the dataset.
 
         Parameters
@@ -730,7 +730,9 @@ class ImagingDataset(object):
             depth = np.array(filenames).ndim
         except:
             raise TypeError('Improperly formatted filenames')
-        if (fmt in ['TIFF16', 'TIFF8']) and not depth == 3:
+        if (fmt in ['TIFF16', 'TIFF8']) and not depth == 3 and not interlace:
+            raise TypeError('Improperly formatted filenames')
+        if interlace and not depth == 2:
             raise TypeError('Improperly formatted filenames')
         if fmt == 'HDF5' and not np.array(filenames).ndim == 1:
             raise TypeError('Improperly formatted filenames')
@@ -738,7 +740,7 @@ class ImagingDataset(object):
             sequence.export(
                 fns, fmt=fmt, fill_gaps=fill_gaps,
                 channel_names=self.channel_names, compression=compression,
-                scale_values=scale_values)
+                scale_values=scale_values, interlace=interlace)
 
     def export_signals(self, path, fmt='csv', channel=0, signals_label=None):
         """Export extracted signals to a file.
@@ -788,7 +790,7 @@ class ImagingDataset(object):
 
     def extract(self, rois=None, signal_channel=0, label=None,
                 remove_overlap=True, n_processes=1, demix_channel=None,
-                local_NMF=False, NMF_kws=None, save_summary=True):
+                demix_npil=False, npil_kws=None, save_summary=True):
         """Extracts imaging data from the current dataset using the
         supplied ROIs file.
 
@@ -811,11 +813,12 @@ class ImagingDataset(object):
         demix_channel : string or int, optional
             Channel to demix from the signal channel, either an integer index
             or a name in self.channel_names If None, do not demix signals.
-        local_NMF : bool, optional
-            If True, perform local NMF demixing during ROI extraction
-            TODO: NMF kwargs
-        NMF_kws : dict, optional
-            Options for NMF procedure; see sima.extract.extract_rois
+        demix_npil : bool, optional
+            If True, perform spatially local neuropil demixing during ROI
+            extraction
+        npil_kws : dict, optional
+            Options for neuropil demixing procedure;
+            see sima.extract.extract_rois
         save_summary : bool, optional
             If True, additionally save a summary of the extracted ROIs.
 
@@ -863,13 +866,13 @@ class ImagingDataset(object):
             return save_extracted_signals(
                 self, rois, self.savedir, label, signal_channel=signal_channel,
                 remove_overlap=remove_overlap, n_processes=n_processes,
-                demix_channel=demix_channel, local_NMF=local_NMF,
-                NMF_kws=NMF_kws, save_summary=save_summary
+                demix_channel=demix_channel, demix_npil=demix_npil,
+                npil_kws=npil_kws, save_summary=save_summary
             )
         else:
             return extract_rois(self, rois, signal_channel, remove_overlap,
-                                n_processes, demix_channel, local_NMF,
-                                NMF_kws)
+                                n_processes, demix_channel, demix_npil,
+                                npil_kws)
 
     def save(self, savedir=None):
         """Save the ImagingDataset to a file."""
