@@ -193,7 +193,17 @@ class ResonantCorrection(MotionEstimationStrategy):
             downsampled_dataset)
         displacements = []
         for d_disps in downsampled_displacements:
-            disps = np.repeat(d_disps, 2, axis=2)  # Repeat the displacements
+            if d_disps.ndim == 3: # whole frame displacements
+                if self._offset == 0:
+                    disps = d_disps[:]
+                    disps[..., 0] *= 2 # multiply y-shifts by 2
+                    displacements.append(disps)
+                    continue
+                else: # duplicate displacements for all rows
+                    disps = np.moveaxis(np.stack(
+                        [d_disps] * dataset.frame_shape[0]), 0, 2)
+            else: # line-by-line displacements
+                disps = np.repeat(d_disps, 2, axis=2)  # Repeat the displacements
             disps[:, :, :, 0] *= 2  # multiply y-shifts by 2
             disps[:, :, 1::2, -1] += self._offset  # shift even rows by offset
             displacements.append(disps)
