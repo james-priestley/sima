@@ -244,7 +244,7 @@ def _observation_counts(raw_shape, displacements, untrimmed_shape):
             x:(x + raw_shape[2])] = 1
     elif displacements.ndim == 2:
         for plane in range(raw_shape[0]):
-            d = list(displacements[plane])
+            d = list(displacements[plane]).round().astype(np.int64))
             if len(d) == 2:
                 d = [0] + d
             cnt[plane + d[0],
