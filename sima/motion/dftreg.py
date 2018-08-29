@@ -36,6 +36,7 @@ import multiprocessing
 import numpy as np
 from scipy.ndimage.interpolation import shift
 import time
+import warnings
 from . import motion
 try:
     from pyfftw.interfaces.numpy_fft import fftn, ifftn
@@ -125,8 +126,8 @@ class DiscreteFourier2D(motion.MotionEstimationStrategy):
         for sequence in dataset:
             num_frames, num_planes, _, _, num_channels = sequence.shape
             if num_channels > 1:
-                raise NotImplementedError("Error: only one colour channel \
-                    can be used for DFT motion correction. Using channel 1.")
+                warnings.warn("Warning: only one colour channel \
+                    can be used for DFT motion correction. Using channel 0.")
 
             # get results into a shape sima likes
             frame_shifts = np.zeros([num_frames, num_planes, 2])
