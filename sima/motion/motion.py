@@ -121,6 +121,11 @@ class MotionEstimationStrategy(with_metaclass(abc.ABCMeta, object)):
         else:
             mc_sequences = sequences
         displacements = self.estimate(sima.ImagingDataset(mc_sequences, None))
+
+        # enforce integer displacements
+        displacements = [d if issubclass(d.dtype.type, np.integer) else \
+                         d.round().astype(np.int64) for d in displacements]
+
         disp_dim = displacements[0].shape[-1]
         max_disp = np.ceil(
             np.max(list(it.chain.from_iterable(d.reshape(-1, disp_dim)
@@ -244,7 +249,7 @@ def _observation_counts(raw_shape, displacements, untrimmed_shape):
             x:(x + raw_shape[2])] = 1
     elif displacements.ndim == 2:
         for plane in range(raw_shape[0]):
-            d = list(displacements[plane].round().astype(np.int64))
+            d = list(displacements[plane])
             if len(d) == 2:
                 d = [0] + d
             cnt[plane + d[0],
