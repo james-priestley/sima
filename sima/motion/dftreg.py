@@ -123,14 +123,13 @@ class DiscreteFourier2D(motion.MotionEstimationStrategy):
         displacements = []
 
         for sequence in dataset:
-            num_planes = sequence.shape[1]
-            num_channels = sequence.shape[4]
+            num_frames, num_planes, _, _, num_channels = sequence.shape
             if num_channels > 1:
                 raise NotImplementedError("Error: only one colour channel \
                     can be used for DFT motion correction. Using channel 1.")
 
             # get results into a shape sima likes
-            frame_shifts = np.zeros([len(frames), num_planes, 2])
+            frame_shifts = np.zeros([num_frames, num_planes, 2])
 
             for plane_idx in range(num_planes):
                 # load into memory... need to pass numpy array to dftreg.
